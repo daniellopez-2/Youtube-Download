@@ -1,3 +1,4 @@
+import * as fs from "fs";
 import * as path from "path";
 import type { Config } from "../config.js";
 import { sanitizeFilename } from "../config.js";
@@ -5,119 +6,66 @@ import {
   _spawnPromise, 
   validateUrl, 
   getFormattedTimestamp, 
-  isYouTubeUrl,
-  generateRandomFilename 
+  isYouTubeUrl
 } from "./utils.js";
 
-/**
- * Downloads a video from the specified URL.
- * 
- * @param url - The URL of the video to download
- * @param config - Configuration object for download settings
- * @param resolution - Preferred video resolution ('480p', '720p', '1080p', 'best')
- * @returns Promise resolving to a success message with the downloaded file path
- * @throws {Error} When URL is invalid or download fails
- * 
- * @example
- * ```typescript
- * // Download with default settings
- * const result = await downloadVideo('https://youtube.com/watch?v=...');
- * console.log(result);
- * 
- * // Download with specific resolution
- * const hdResult = await downloadVideo(
- *   'https://youtube.com/watch?v=...',
- *   undefined,
- *   '1080p'
- * );
- * console.log(hdResult);
- * ```
- */
 export async function downloadVideo(
   url: string,
   config: Config,
   resolution: "480p" | "720p" | "1080p" | "best" = "720p"
 ): Promise<string> {
-  const userDownloadsDir = config.file.downloadsDir;
-  
   try {
     validateUrl(url);
+    
+    // Ensure downloads directory exists
+    if (!fs.existsSync(config.file.downloadsDir)) {
+      fs.mkdirSync(config.file.downloadsDir, { recursive: true });
+    }
+    
     const timestamp = getFormattedTimestamp();
-      
-    let format: string;
-    if (isYouTubeUrl(url)) {
-      // YouTube-specific format selection
-      switch (resolution) {
-        case "480p":
-          format = "bestvideo[height<=480]+bestaudio/best[height<=480]/best";
-          break;
-        case "720p":
-          format = "bestvideo[height<=720]+bestaudio/best[height<=720]/best";
-          break;
-        case "1080p":
-          format = "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best";
-          break;
-        case "best":
-          format = "bestvideo+bestaudio/best";
-          break;
-        default:
-          format = "bestvideo[height<=720]+bestaudio/best[height<=720]/best";
-      }
-    } else {
-      // For other platforms, use quality labels that are more generic
-      switch (resolution) {
-        case "480p":
-          format = "worst[height>=480]/best[height<=480]/worst";
-          break;
-        case "best":
-          format = "bestvideo+bestaudio/best";
-          break;
-        default: // Including 720p and 1080p cases
-          // Prefer HD quality but fallback to best available
-          format = "bestvideo[height>=720]+bestaudio/best[height>=720]/best";
-      }
-    }
-
-    let outputTemplate: string;
-    let expectedFilename: string;
+    const outputTemplate = path.join(config.file.downloadsDir, `video_${timestamp}.%(ext)s`);
     
-    try {
-      // 嘗試獲取檔案名稱
-      outputTemplate = path.join(
-        userDownloadsDir,
-        sanitizeFilename(`%(title)s [%(id)s] ${timestamp}`, config.file) + '.%(ext)s'
-      );
-      
-      expectedFilename = await _spawnPromise("yt-dlp", [
-        "--get-filename",
-        "-f", format,
-        "--output", outputTemplate,
-        url
-      ]);
-      expectedFilename = expectedFilename.trim();
-    } catch (error) {
-      // 如果無法獲取檔案名稱，使用隨機檔案名
-      const randomFilename = generateRandomFilename('mp4');
-      outputTemplate = path.join(userDownloadsDir, randomFilename);
-      expectedFilename = randomFilename;
+    // Simple format selection that actually works
+    const formatMap = {
+      "480p": "worst[height>=360]/best[height<=480]/worst",
+      "720p": "best[height<=720]/best", 
+      "1080p": "best[height<=1080]/best",
+      "best": "best"
+    };
+    
+    console.log(`Downloading ${url} to ${outputTemplate}`);
+    
+    const output = await _spawnPromise("yt-dlp", [
+      "--verbose",
+      "-f", formatMap[resolution],
+      "-o", outputTemplate,
+      "--no-mtime",
+      url
+    ]);
+    
+    console.log(`yt-dlp output: ${output}`);
+    
+    // Find the downloaded file
+    const files = fs.readdirSync(config.file.downloadsDir);
+    const downloadedFile = files.find(f => f.includes(`video_${timestamp}`));
+    
+    if (!downloadedFile) {
+      // Try to find any new video file
+      const videoFiles = files.filter(f => f.match(/\.(mp4|webm|mkv|avi)$/i));
+      if (videoFiles.length === 0) {
+        throw new Error(`No video file found after download. Files in directory: ${files.join(', ')}`);
+      }
+      const latestFile = videoFiles[videoFiles.length - 1];
+      return `Video downloaded as "${latestFile}" to ${config.file.downloadsDir}`;
     }
     
-    // Download with progress info
-    try {
-      await _spawnPromise("yt-dlp", [
-        "--progress",
-        "--newline",
-        "--no-mtime",
-        "-f", format,
-        "--output", outputTemplate,
-        url
-      ]);
-    } catch (error) {
-      throw new Error(`Download failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-
-    return `Video successfully downloaded as "${path.basename(expectedFilename)}" to ${userDownloadsDir}`;
+    const filePath = path.join(config.file.downloadsDir, downloadedFile);
+    const stats = fs.statSync(filePath);
+    
+    return `Video successfully downloaded as "${downloadedFile}" (${Math.round(stats.size / 1024 / 1024)}MB) to ${config.file.downloadsDir}`;
+    
   } catch (error) {
-    throw error;
+    console.error(`Download failed: ${error}`);
+    throw new Error(`Video download failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-} 
+}

@@ -2,19 +2,6 @@ import * as fs from 'fs';
 import { spawn } from 'child_process';
 import { randomBytes } from 'crypto';
 
-/**
- * Validates if a given string is a valid URL.
- * 
- * @param url - The URL string to validate
- * @returns True if the URL is valid, false otherwise
- * 
- * @example
- * ```typescript
- * if (validateUrl('https://youtube.com/watch?v=...')) {
- *   // URL is valid
- * }
- * ```
- */
 export function validateUrl(url: string): boolean {
   try {
     new URL(url);
@@ -24,19 +11,6 @@ export function validateUrl(url: string): boolean {
   }
 }
 
-/**
- * Checks if a URL is from YouTube.
- * 
- * @param url - The URL to check
- * @returns True if the URL is from YouTube, false otherwise
- * 
- * @example
- * ```typescript
- * if (isYouTubeUrl('https://youtube.com/watch?v=...')) {
- *   // URL is from YouTube
- * }
- * ```
- */
 export function isYouTubeUrl(url: string): boolean {
   try {
     const parsedUrl = new URL(url);
@@ -46,22 +20,6 @@ export function isYouTubeUrl(url: string): boolean {
   }
 }
 
-/**
- * Safely cleans up a directory and its contents.
- * 
- * @param directory - Path to the directory to clean up
- * @returns Promise that resolves when cleanup is complete
- * @throws {Error} When directory cannot be removed
- * 
- * @example
- * ```typescript
- * try {
- *   await safeCleanup('/path/to/temp/dir');
- * } catch (error) {
- *   console.error('Cleanup failed:', error);
- * }
- * ```
- */
 export async function safeCleanup(directory: string): Promise<void> {
   try {
     await fs.promises.rm(directory, { recursive: true, force: true });
@@ -70,58 +28,46 @@ export async function safeCleanup(directory: string): Promise<void> {
   }
 }
 
-/**
- * Spawns a child process and returns its output as a promise.
- * 
- * @param command - The command to execute
- * @param args - Array of command arguments
- * @returns Promise resolving to the command output
- * @throws {Error} When command execution fails
- * 
- * @example
- * ```typescript
- * try {
- *   const output = await _spawnPromise('yt-dlp', ['--version']);
- *   console.log('yt-dlp version:', output);
- * } catch (error) {
- *   console.error('Command failed:', error);
- * }
- * ```
- */
 export function _spawnPromise(command: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const process = spawn(command, args);
-    let output = '';
+    console.log(`Executing: ${command} ${args.join(' ')}`);
+    
+    const process = spawn(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    
+    let stdout = '';
+    let stderr = '';
 
     process.stdout.on('data', (data) => {
-      output += data.toString();
+      const output = data.toString();
+      stdout += output;
+      console.log(output);
     });
 
     process.stderr.on('data', (data) => {
-      output += data.toString();
+      const output = data.toString();
+      stderr += output;
+      console.error(output);
     });
 
     process.on('close', (code) => {
+      const fullOutput = stdout + stderr;
+      console.log(`Process exited with code: ${code}`);
+      
       if (code === 0) {
-        resolve(output);
+        resolve(fullOutput);
       } else {
-        reject(new Error(`Failed with exit code: ${code}\n${output}`));
+        reject(new Error(`Command failed with exit code ${code}:\n${fullOutput}`));
       }
+    });
+
+    process.on('error', (error) => {
+      reject(new Error(`Failed to start process: ${error.message}`));
     });
   });
 }
 
-/**
- * Generates a formatted timestamp string for file naming.
- * 
- * @returns Formatted timestamp string in the format 'YYYY-MM-DD_HH-mm-ss'
- * 
- * @example
- * ```typescript
- * const timestamp = getFormattedTimestamp();
- * console.log(timestamp); // '2024-03-20_12-30-00'
- * ```
- */
 export function getFormattedTimestamp(): string {
   return new Date().toISOString()
     .replace(/[:.]/g, '-')
@@ -129,55 +75,24 @@ export function getFormattedTimestamp(): string {
     .split('.')[0];
 }
 
-/**
- * Generates a random filename with timestamp prefix.
- * 
- * @param extension - Optional file extension (default: 'mp4')
- * @returns A random filename with timestamp
- * 
- * @example
- * ```typescript
- * const filename = generateRandomFilename('mp3');
- * console.log(filename); // '2024-03-20_12-30-00_a1b2c3d4.mp3'
- * ```
- */
 export function generateRandomFilename(extension: string = 'mp4'): string {
   const timestamp = getFormattedTimestamp();
   const randomId = randomBytes(4).toString('hex');
   return `${timestamp}_${randomId}.${extension}`;
 }
 
-/**
- * Cleans SRT subtitle content to produce a plain text transcript.
- * Removes timestamps, sequence numbers, and HTML tags.
- * 
- * @param srtContent - Raw SRT subtitle content
- * @returns Cleaned transcript text
- * 
- * @example
- * ```typescript
- * const cleanedText = cleanSubtitleToTranscript(srtContent);
- * console.log(cleanedText); // 'Hello world this is a transcript...'
- * ```
- */
 export function cleanSubtitleToTranscript(srtContent: string): string {
   return srtContent
     .split('\n')
     .filter(line => {
       const trimmed = line.trim();
-      // Remove empty lines
       if (!trimmed) return false;
-      // Remove sequence numbers (lines that are just digits)
       if (/^\d+$/.test(trimmed)) return false;
-      // Remove timestamp lines
       if (/^\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[.,]\d{3}$/.test(trimmed)) return false;
       return true;
     })
-    .map(line => {
-      // Remove HTML tags
-      return line.replace(/<[^>]*>/g, '');
-    })
+    .map(line => line.replace(/<[^>]*>/g, ''))
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim();
-} 
+}

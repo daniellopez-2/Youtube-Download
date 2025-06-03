@@ -1,4 +1,5 @@
 # yt-dlp-mcp
+[![smithery badge](https://smithery.ai/badge/@daniellopez-2/youtube-download)](https://smithery.ai/server/@daniellopez-2/youtube-download)
 
 An MCP server implementation that integrates with yt-dlp, providing video and audio content download capabilities (e.g. YouTube, Facebook, Tiktok, etc.) for LLMs.
 
@@ -11,6 +12,14 @@ An MCP server implementation that integrates with yt-dlp, providing video and au
 * **MCP Integration**: Works with Dive and other MCP-compatible LLMs
 
 ## Installation
+
+### Installing via Smithery
+
+To install youtube-download for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@daniellopez-2/youtube-download):
+
+```bash
+npx -y @smithery/cli install @daniellopez-2/youtube-download --client claude
+```
 
 ### Prerequisites
 
@@ -119,5 +128,4 @@ MIT
 ## Author
 
 Dewei Yen
-
 

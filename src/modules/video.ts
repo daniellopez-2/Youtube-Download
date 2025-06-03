@@ -1,12 +1,10 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { Config } from "../config.js";
-import { sanitizeFilename } from "../config.js";
 import { 
   _spawnPromise, 
   validateUrl, 
-  getFormattedTimestamp, 
-  isYouTubeUrl
+  getFormattedTimestamp
 } from "./utils.js";
 
 export async function downloadVideo(
